@@ -1,57 +1,107 @@
-import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import dotenv from 'dotenv';
+// backend/server.js
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const path = require('path');
+require('dotenv').config();
 
-// Import ALL routes
-import authRoutes from './routes/auth.js';
-import companyRoutes from './routes/companies.js';
-import userRoutes from './routes/users.js';
-import eventRoutes from './routes/events.js';
+// Import routes
+const authRoutes = require('./routes/auth');
+const clientRoutes = require('./routes/clients');
+const timeEntryRoutes = require('./routes/timeEntries');
+const invoiceRoutes = require('./routes/invoices'); // We'll create this
 
-dotenv.config();
-
-console.log('🔄 Starting server...');
-
+// Initialize Express app
 const app = express();
 
 // Middleware
-app.use(cors({
-  origin: 'http://localhost:3001',
-  credentials: true
-}));
-app.use(express.json());
+app.use(cors());
+app.use(express.json({ extended: false }));
 
-// Routes - ADD ALL OF THESE
+// Database connection
+const connectDB = async () => {
+    try {
+        // Use MONGODB_URI from .env or local MongoDB
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/trackify';
+        
+        await mongoose.connect(mongoURI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+        });
+        
+        console.log('MongoDB connected successfully');
+    } catch (err) {
+        console.error('MongoDB connection error:', err.message);
+        process.exit(1);
+    }
+};
+
+connectDB();
+
+// Define API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/companies', companyRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/events', eventRoutes);
+app.use('/api/clients', clientRoutes);
+app.use('/api/time', timeEntryRoutes);
+app.use('/api/invoices', invoiceRoutes); // Add this line
 
-// Basic route
-app.get('/api', (req, res) => {
-  console.log('✅ API route was hit!');
-  res.json({ message: 'Trackify API is running!' });
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'OK', message: 'Trackify API is running' });
 });
 
-const MONGODB_URI = process.env.MONGODB_URI;
-console.log('🔗 Connecting to MongoDB...');
+// Serve static assets in production
+if (process.env.NODE_ENV === 'production') {
+    // Set static folder
+    app.use(express.static(path.join(__dirname, '../client/build')));
 
-mongoose.connect(MONGODB_URI)
-  .then(() => {
-    console.log('✅ Connected to MongoDB');
-    
-    const PORT = process.env.PORT || 5001;
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📡 API: http://localhost:${PORT}/api`);
-      console.log(`🔐 Auth: http://localhost:${PORT}/api/auth`);
-      console.log(`🏢 Companies: http://localhost:${PORT}/api/companies`);
-      console.log(`👤 Users: http://localhost:${PORT}/api/users`);
-      console.log(`📅 Events: http://localhost:${PORT}/api/events`);
+    // Handle React routing, return all requests to React app
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
     });
-  })
-  .catch(err => {
-    console.error('❌ MongoDB connection error:', err);
-  });
-  
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ 
+        msg: 'Something went wrong!', 
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined 
+    });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({ msg: 'Route not found' });
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+const server = app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+        console.log('Server closed');
+        mongoose.connection.close(false, () => {
+            console.log('MongoDB connection closed');
+            process.exit(0);
+        });
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully');
+    server.close(() => {
+        console.log('Server closed');
+        mongoose.connection.close(false, () => {
+            console.log('MongoDB connection closed');
+            process.exit(0);
+        });
+    });
+});
+
+module.exports = app;
