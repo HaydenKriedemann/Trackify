@@ -5,11 +5,14 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-// Import routes
+// Import ALL your route files
 const authRoutes = require('./routes/auth');
 const clientRoutes = require('./routes/clients');
 const timeEntryRoutes = require('./routes/timeEntries');
-const invoiceRoutes = require('./routes/invoices'); // We'll create this
+const invoiceRoutes = require('./routes/invoices');
+const companyRoutes = require('./routes/companies');
+const eventRoutes = require('./routes/events');
+const userRoutes = require('./routes/users');
 
 // Initialize Express app
 const app = express();
@@ -22,39 +25,59 @@ app.use(express.json({ extended: false }));
 const connectDB = async () => {
     try {
         // Use MONGODB_URI from .env or local MongoDB
-        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/trackify';
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/trackify';
         
         await mongoose.connect(mongoURI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
         
-        console.log('MongoDB connected successfully');
+        console.log('✅ MongoDB connected successfully');
     } catch (err) {
-        console.error('MongoDB connection error:', err.message);
-        process.exit(1);
+        console.error('❌ MongoDB connection error:', err.message);
+        console.log('⚠️  Running without database connection');
     }
 };
 
 connectDB();
 
-// Define API routes
+// Define ALL API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/time', timeEntryRoutes);
-app.use('/api/invoices', invoiceRoutes); // Add this line
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/companies', companyRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/users', userRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', message: 'Trackify API is running' });
+    res.json({ 
+        status: 'OK', 
+        message: 'Trackify API is running',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Test all routes
+app.get('/api/test', (req, res) => {
+    res.json({
+        message: 'All routes are working',
+        routes: [
+            '/api/auth',
+            '/api/clients', 
+            '/api/time',
+            '/api/invoices',
+            '/api/companies',
+            '/api/events',
+            '/api/users'
+        ]
+    });
 });
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
-    // Set static folder
     app.use(express.static(path.join(__dirname, '../client/build')));
-
-    // Handle React routing, return all requests to React app
     app.get('*', (req, res) => {
         res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
     });
@@ -71,14 +94,19 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
-    res.status(404).json({ msg: 'Route not found' });
+    res.status(404).json({ 
+        msg: 'Route not found',
+        path: req.originalUrl 
+    });
 });
 
 // Start server
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🔗 Test routes: http://localhost:${PORT}/api/test`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 // Handle graceful shutdown
